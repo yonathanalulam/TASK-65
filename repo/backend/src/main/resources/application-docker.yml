@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:mysql://mysql:3306/culinary_coach?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=10000&socketTimeout=30000
+    username: cc_user
+    password: cc_password
+    hikari:
+      connection-timeout: 30000
+      initialization-fail-timeout: 60000
+      maximum-pool-size: 10
+
+  flyway:
+    connect-retries: 10
+    connect-retries-interval: 3

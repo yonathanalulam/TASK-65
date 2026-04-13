@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=MYSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  flyway:
+    enabled: true
+    locations: classpath:db/test-migration
+
+  cache:
+    type: caffeine
+
+app:
+  bootstrap:
+    admin-password: TestAdmin12345!@
+  security:
+    bcrypt-strength: 4
+    mfa:
+      encryption-key: test-encryption-key-32-characters!
+  rate-limit:
+    authenticated-per-minute: 6000
+    unauthenticated-per-minute: 6000
+    admin-per-minute: 6000
+    burst-capacity: 1000
+    burst-period-seconds: 1

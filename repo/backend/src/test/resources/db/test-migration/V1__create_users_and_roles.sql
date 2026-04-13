@@ -1,0 +1,45 @@
+-- V1: Core identity tables (H2 compatible)
+
+CREATE TABLE users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(64) NOT NULL,
+    username_lower VARCHAR(64) NOT NULL UNIQUE,
+    display_name VARCHAR(100),
+    email VARCHAR(255),
+    password_hash VARCHAR(255) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING_SETUP',
+    account_locked BOOLEAN NOT NULL DEFAULT FALSE,
+    lock_expires_at TIMESTAMP NULL,
+    mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    force_password_change BOOLEAN NOT NULL DEFAULT FALSE,
+    failed_login_count INT NOT NULL DEFAULT 0,
+    last_failed_login_at TIMESTAMP NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    version BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE roles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE user_roles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, role_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE password_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);

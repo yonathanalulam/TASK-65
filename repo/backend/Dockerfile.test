@@ -1,0 +1,19 @@
+FROM eclipse-temurin:23-jdk
+
+WORKDIR /app
+
+# Copy Maven wrapper and pom first for dependency caching
+COPY .mvn/ .mvn/
+COPY mvnw mvnw
+COPY pom.xml pom.xml
+
+RUN chmod +x mvnw
+
+# Download dependencies (cached layer)
+RUN ./mvnw dependency:go-offline -B -q || true
+
+# Copy source
+COPY src/ src/
+
+# Run tests with the 'test' profile (H2 in-memory, no MySQL)
+CMD ["./mvnw", "test", "-B"]
