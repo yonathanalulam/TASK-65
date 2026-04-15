@@ -170,6 +170,57 @@ class PlaylistEndpointTest {
             .andExpect(status().isBadRequest());
     }
 
+    // ── Reorder Items ──────────────────────────────────────────────
+
+    @Test
+    void reorderItems_changesOrder() throws Exception {
+        // Create a playlist
+        String createBody = """
+            {"name":"Reorder Test","description":"Desc"}
+            """;
+
+        MvcResult createResult = helper.authPost("/api/v1/audio/playlists", userSession, createBody)
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long playlistId = helper.extractLong(createResult, "data.id");
+
+        // Add two items
+        helper.authPost("/api/v1/audio/playlists/" + playlistId + "/items", userSession,
+                """
+                {"audioAssetId":1}
+                """)
+            .andExpect(status().isOk());
+
+        helper.authPost("/api/v1/audio/playlists/" + playlistId + "/items", userSession,
+                """
+                {"audioAssetId":2}
+                """)
+            .andExpect(status().isOk());
+
+        // Reorder: put asset 2 before asset 1
+        String reorderBody = """
+            {"orderedAssetIds":[2,1]}
+            """;
+
+        helper.authPut("/api/v1/audio/playlists/" + playlistId + "/items/reorder",
+                userSession, reorderBody)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
+
+        // Verify the new order
+        helper.authGet("/api/v1/audio/playlists/" + playlistId, userSession)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.items[0].id").value(2))
+            .andExpect(jsonPath("$.data.items[1].id").value(1));
+    }
+
+    @Test
+    void reorderItems_unauthenticated_returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/audio/playlists/999/items/reorder"))
+            .andExpect(status().isForbidden());
+    }
+
     @Test
     void getPlaylists_unauthenticated_returns403() throws Exception {
         mockMvc.perform(get("/api/v1/audio/playlists"))

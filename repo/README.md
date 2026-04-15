@@ -1,5 +1,7 @@
 # Culinary Study & Cooking Coach Workstation
 
+> **Project type:** `fullstack`
+
 An offline-first local learning and cooking execution platform for home cooks and self-learners. Combines lesson audio, guided cooking sessions, practice drills, wrong-question remediation, and local bookkeeping capabilities.
 
 ## Stack
@@ -11,85 +13,145 @@ An offline-first local learning and cooking execution platform for home cooks an
 
 ## Prerequisites
 
-- Java 23+
-- Node.js 18+ / npm 9+
-- Docker (for MySQL via Docker Compose)
+- Docker and Docker Compose (no local Java, Node.js, or npm required for runtime)
 - Git
 
-## Quick Start
+## Quick Start (Docker-contained)
 
-### 1. Start MySQL
+All services run inside Docker. No local Java, Node.js, or npm installation is required.
 
-```bash
-docker compose up -d
-```
-
-This starts MySQL 8.0 on port 3306 and Adminer (DB browser) on port 8081.
-
-### 2. Set Environment Variables
+### 1. Start All Services
 
 ```bash
-# Required: bootstrap admin password (only needed on first run)
-export APP_BOOTSTRAP_ADMIN_PASSWORD="YourSecureAdminPassword1!"
-
-# Required: MFA encryption key (32+ characters)
-export MFA_ENCRYPTION_KEY="your-production-encryption-key-32ch"
+docker-compose up -d
 ```
 
-See `.env.example` for all configuration options.
+This starts:
+- **MySQL 8.0** on port 3306
+- **Backend (Spring Boot)** on port 8080
+- **Frontend (Vue.js)** on port 80
+- **Adminer (DB browser)** on port 8081
 
-### 3. Start the Backend
+The backend waits for MySQL to be healthy before starting, and the frontend waits for the backend. On first run, Flyway migrations run automatically and the admin user is bootstrapped.
+
+### 2. Access the Application
+
+| Service | URL |
+|---|---|
+| Frontend (UI) | http://localhost |
+| Backend API | http://localhost:8080 |
+| Adminer (DB browser) | http://localhost:8081 |
+
+### 3. Demo Credentials
+
+The following credentials are available out of the box with `docker-compose up`:
+
+| Role | Username | Password | Notes |
+|---|---|---|---|
+| `ROLE_ADMIN` | `admin` | `Admin@12345678!` | Bootstrapped on first startup |
+
+To create additional demo users for `ROLE_USER` and `ROLE_PARENT_COACH`, use the admin API after startup:
 
 ```bash
-cd backend
-chmod +x mvnw
-./mvnw spring-boot:run
+# Wait for the backend to be healthy
+until curl -sf http://localhost:8080/api/v1/auth/csrf-token > /dev/null; do sleep 2; done
+
+# Login as admin to get session credentials
+LOGIN_RESPONSE=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Admin@12345678!"}')
+
+SESSION_ID=$(echo "$LOGIN_RESPONSE" | grep -o '"sessionId":"[^"]*"' | cut -d'"' -f4)
+SIGNING_KEY=$(echo "$LOGIN_RESPONSE" | grep -o '"signingKey":"[^"]*"' | cut -d'"' -f4)
+
+# Helper function to create signed requests
+sign_request() {
+  local METHOD=$1 PATH=$2
+  local TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  local NONCE=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen)
+  local PAYLOAD="${METHOD}\n${PATH}\n${TIMESTAMP}\n${NONCE}"
+  local SIGNATURE=$(printf '%b' "$PAYLOAD" | openssl dgst -sha256 -hmac "$(echo "$SIGNING_KEY" | base64 -d)" -binary | base64)
+  echo "-H 'X-Session-Id: ${SESSION_ID}' -H 'X-Timestamp: ${TIMESTAMP}' -H 'X-Nonce: ${NONCE}' -H 'X-Signature: ${SIGNATURE}'"
+}
+
+# Create a ROLE_USER demo user
+eval curl -s -X POST http://localhost:8080/api/v1/admin/users \
+  -H "Content-Type: application/json" \
+  $(sign_request POST /api/v1/admin/users) \
+  -d '{"username":"demouser","password":"DemoUser12345!@","role":"ROLE_USER"}'
+
+# Create a ROLE_PARENT_COACH demo user
+eval curl -s -X POST http://localhost:8080/api/v1/admin/users \
+  -H "Content-Type: application/json" \
+  $(sign_request POST /api/v1/admin/users) \
+  -d '{"username":"democoach","password":"DemoCoach12345!@","role":"ROLE_PARENT_COACH"}'
 ```
 
-The backend starts on `http://localhost:8080`. On first run, it applies all Flyway migrations and creates the admin user if `APP_BOOTSTRAP_ADMIN_PASSWORD` is set.
+After running the above, the following credentials are available:
 
-### 4. Start the Frontend
+| Role | Username | Password |
+|---|---|---|
+| `ROLE_ADMIN` | `admin` | `Admin@12345678!` |
+| `ROLE_USER` | `demouser` | `DemoUser12345!@` |
+| `ROLE_PARENT_COACH` | `democoach` | `DemoCoach12345!@` |
+
+## Verification
+
+### Backend API Verification
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# 1. Health check — expect {"success":true,"data":{"status":"csrf_token_set"}}
+curl -s http://localhost:8080/api/v1/auth/csrf-token
+# Expected: JSON with "success":true
+
+# 2. Login as admin — expect sessionId and signingKey in response
+curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Admin@12345678!"}'
+# Expected: {"success":true,"data":{"sessionId":"...","signingKey":"...","userId":1,"mfaRequired":false}}
+
+# 3. Access protected endpoint — expect user principal data
+# (Use the sessionId from step 2)
+curl -s http://localhost:8080/api/v1/auth/me \
+  -H "X-Session-Id: <sessionId-from-step-2>"
+# Expected: {"success":true,"data":{"userId":1,"username":"admin","authorities":["ROLE_ADMIN"],...}}
+
+# 4. List audio assets — expect non-empty array of seeded audio content
+curl -s http://localhost:8080/api/v1/audio/assets \
+  -H "X-Session-Id: <sessionId-from-step-2>"
+# Expected: {"success":true,"data":{"content":[...]}} with 12 seeded assets
+
+# 5. List questions — expect seeded question bank
+curl -s http://localhost:8080/api/v1/questions \
+  -H "X-Session-Id: <sessionId-from-step-2>"
+# Expected: {"success":true,"data":{"content":[...]}} with 12 seeded questions
 ```
 
-The frontend starts on `http://localhost:5173` with a proxy to the backend API.
+### Frontend Verification
 
-### 5. Login
-
-Open `http://localhost:5173` and login with:
-- Username: `admin`
-- Password: the value you set in `APP_BOOTSTRAP_ADMIN_PASSWORD`
-
-You will be prompted to change the password on first login.
+1. Open http://localhost in a browser
+2. Login with `admin` / `Admin@12345678!`
+3. Verify the dashboard loads with navigation links to Audio Library, Cooking Sessions, Questions, Notebook, Drills, Notifications, and Admin panels
+4. Navigate to "Audio Library" and verify 12 audio assets are listed
+5. Navigate to "Questions" and verify the question bank loads
 
 ## Running Tests
 
-### Backend Tests
+All tests run inside Docker. No local toolchain required.
 
 ```bash
-cd backend
-./mvnw test
+./run_tests.sh
 ```
 
-Tests use H2 in-memory database (MySQL compatibility mode). No external services required.
+This builds and runs both backend (Spring Boot + H2 in-memory) and frontend (vitest + happy-dom) test suites in isolated Docker containers.
 
-### Frontend Type Check
+### Test Details
 
-```bash
-cd frontend
-npx vue-tsc --noEmit
-```
+- **Backend tests:** `@SpringBootTest` integration tests with H2 in-memory database (MySQL compatibility mode). No external services required.
+- **Frontend tests:** Vitest with happy-dom environment.
+- Test logs written to `/tmp/cc_backend_test.log` and `/tmp/cc_frontend_test.log`.
 
-### Frontend Build
-
-```bash
-cd frontend
-npm run build
-```
+> **Local development** (running services outside Docker) is optional and documented separately in [`docs/local-development.md`](docs/local-development.md).
 
 ## Architecture Overview
 
@@ -178,16 +240,6 @@ Daily reconciliation exports can be run in two ways:
 
 Export files are CSV with SHA-256 checksum, stored under `./exports/reconciliation/` with naming
 convention `reconciliation_YYYYMMDD_vN.csv`.
-
-## Manual Verification Areas
-
-Some features require runtime testing with a running MySQL instance:
-
-- Audio segment download (creates local cache files)
-- Cooking session timer reconstruction after restart
-- Reconciliation CSV export (writes to `./exports/`)
-- Scheduled job execution (reminder generation, cache cleanup)
-- Frontend MFA QR code display
 
 ## API Documentation
 

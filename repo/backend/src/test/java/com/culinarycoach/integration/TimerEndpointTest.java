@@ -1,6 +1,9 @@
 package com.culinarycoach.integration;
 
+import com.culinarycoach.domain.entity.CookingSessionTimer;
+import com.culinarycoach.domain.enums.TimerStatus;
 import com.culinarycoach.domain.repository.AuthSessionRepository;
+import com.culinarycoach.domain.repository.CookingSessionTimerRepository;
 import com.culinarycoach.domain.repository.RoleRepository;
 import com.culinarycoach.domain.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +35,7 @@ class TimerEndpointTest {
     @Autowired private RoleRepository roleRepository;
     @Autowired private AuthSessionRepository authSessionRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private CookingSessionTimerRepository timerRepository;
 
     private TestHelper helper;
     private TestHelper.SessionInfo userSession;
@@ -145,5 +149,101 @@ class TimerEndpointTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+    }
+
+    // ── Acknowledge Timer ───────────────────────────────────────────
+
+    @Test
+    void acknowledgeTimer_elapsedTimer_changesStatusToAcknowledged() throws Exception {
+        String body = """
+            {"durationSeconds":60,"label":"Ack Me"}
+            """;
+
+        MvcResult createResult = helper.authPost(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers", userSession, body)
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long timerId = helper.extractLong(createResult, "data.id");
+
+        // Transition timer to ELAPSED_PENDING_ACK via repository (simulating elapsed timer)
+        CookingSessionTimer timer = timerRepository.findById(timerId).orElseThrow();
+        timer.setStatus(TimerStatus.ELAPSED_PENDING_ACK);
+        timerRepository.save(timer);
+
+        helper.authPostEmpty(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers/" + timerId + "/acknowledge",
+            userSession)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.status").value("ACKNOWLEDGED"));
+    }
+
+    @Test
+    void acknowledgeTimer_runningTimer_returnsBadRequest() throws Exception {
+        String body = """
+            {"durationSeconds":120,"label":"Not Elapsed"}
+            """;
+
+        MvcResult createResult = helper.authPost(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers", userSession, body)
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long timerId = helper.extractLong(createResult, "data.id");
+
+        // Timer is still RUNNING, acknowledge should fail with 409 Conflict
+        helper.authPostEmpty(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers/" + timerId + "/acknowledge",
+            userSession)
+            .andExpect(status().isConflict());
+    }
+
+    // ── Dismiss Timer ───────────────────────────────────────────────
+
+    @Test
+    void dismissTimer_elapsedTimer_changesStatusToDismissed() throws Exception {
+        String body = """
+            {"durationSeconds":60,"label":"Dismiss Me"}
+            """;
+
+        MvcResult createResult = helper.authPost(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers", userSession, body)
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long timerId = helper.extractLong(createResult, "data.id");
+
+        // Transition timer to ELAPSED_PENDING_ACK via repository
+        CookingSessionTimer timer = timerRepository.findById(timerId).orElseThrow();
+        timer.setStatus(TimerStatus.ELAPSED_PENDING_ACK);
+        timerRepository.save(timer);
+
+        helper.authPostEmpty(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers/" + timerId + "/dismiss",
+            userSession)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.status").value("DISMISSED"));
+    }
+
+    @Test
+    void dismissTimer_runningTimer_returnsBadRequest() throws Exception {
+        String body = """
+            {"durationSeconds":120,"label":"Not Elapsed Dismiss"}
+            """;
+
+        MvcResult createResult = helper.authPost(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers", userSession, body)
+            .andExpect(status().isOk())
+            .andReturn();
+
+        Long timerId = helper.extractLong(createResult, "data.id");
+
+        // Timer is still RUNNING, dismiss should fail with 409 Conflict
+        helper.authPostEmpty(
+            "/api/v1/cooking/sessions/" + sessionId + "/timers/" + timerId + "/dismiss",
+            userSession)
+            .andExpect(status().isConflict());
     }
 }

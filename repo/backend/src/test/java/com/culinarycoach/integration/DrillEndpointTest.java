@@ -123,6 +123,46 @@ class DrillEndpointTest {
             .andExpect(jsonPath("$.data.status").exists());
     }
 
+    // ── Similar Drill ──────────────────────────────────────────────
+
+    @Test
+    void launchSimilarDrill_returns200() throws Exception {
+        Long entryId = createNotebookEntry();
+
+        helper.authPost("/api/v1/drills/similar", userSession,
+                "{\"entryId\":" + entryId + "}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.id").exists())
+            .andExpect(jsonPath("$.data.drillType").exists());
+    }
+
+    @Test
+    void launchSimilarDrill_unauthenticated_returns403() throws Exception {
+        mockMvc.perform(post("/api/v1/drills/similar"))
+            .andExpect(status().isForbidden());
+    }
+
+    // ── Variant Drill ───────────────────────────────────────────────
+
+    @Test
+    void launchVariantDrill_returns200() throws Exception {
+        Long entryId = createNotebookEntry();
+
+        helper.authPost("/api/v1/drills/variant", userSession,
+                "{\"entryId\":" + entryId + "}")
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.id").exists())
+            .andExpect(jsonPath("$.data.drillType").exists());
+    }
+
+    @Test
+    void launchVariantDrill_unauthenticated_returns403() throws Exception {
+        mockMvc.perform(post("/api/v1/drills/variant"))
+            .andExpect(status().isForbidden());
+    }
+
     @Test
     void drills_unauthenticated_returns403() throws Exception {
         mockMvc.perform(post("/api/v1/drills/retry"))
