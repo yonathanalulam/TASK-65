@@ -1,4 +1,4 @@
-# Delivery Acceptance + Project Architecture Audit (Rerun)
+# Delivery Acceptance + Project Architecture Audit 
 
 ## 1. Verdict
 - **Overall conclusion: Partial Pass**
@@ -219,5 +219,4 @@
 - Major security/auth surfaces are now materially covered by integration tests, but uncovered high-risk points remain (frontend/backend signing contract, checkout ownership regression guard, assigned parent/coach happy-path + privacy logging assertions).
 
 ## 9. Final Notes
-- This rerun shows substantial improvement versus the prior report: core auth/session plumbing, MFA verification path, parent/coach backend model/APIs, documentation, and integration testing all improved materially.
 - Remaining acceptance risk is concentrated in frontend completeness and one likely client/server signing-contract defect, not in overall architecture shape.
